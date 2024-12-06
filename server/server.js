@@ -4,6 +4,7 @@ import "dotenv/config";
 import cookieParser from "cookie-parser";
 import conectDB from "./config/mongodb.js";
 import authRouter from "./routes/authRoutes.js";
+import userRouter from "./routes/userRoute.js";
 
 const Port = process.env.PORT || 8000;
 conectDB();
@@ -17,5 +18,6 @@ app.use(cors({ credentials: true }));
 //API endpoints
 app.get("/", (req, res) => res.send("All good guys"));
 app.use("/api/auth", authRouter);
+app.use("/api/user", userRouter);
 
 app.listen(Port, () => console.log(`App listening on port ${Port}`));
