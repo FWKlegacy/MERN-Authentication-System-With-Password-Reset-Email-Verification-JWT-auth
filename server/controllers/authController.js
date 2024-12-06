@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import userModel from "../models/userModel.js";
+import transporter from "../config/nodeMailer.js";
 
 //user signup controller function
 export const register = async (req, res) => {
@@ -29,6 +30,14 @@ export const register = async (req, res) => {
       sameSite: process.env.NODE_ENV === "production " ? "none" : "strict",
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
+    //sending welcome email
+    const mailOptions = {
+      from: process.env.SENDER_EMAIL,
+      to: email,
+      subject: "Welcome to GreatStack",
+      text: `Welcome to GreatStack website. Your account has successfully been created with email id :${email}`,
+    };
+    await transporter.sendMail(mailOptions);
 
     return res.json({ success: true });
   } catch (error) {
@@ -46,12 +55,15 @@ export const login = async (req, res) => {
   try {
     const user = await userModel.findOne({ email });
 
-    if (!user) return res.json({ success: false, message: "invalid email" });
+    if (!user) {
+      return res.json({ success: false, message: "invalid email" });
+    }
 
     //compare password
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch)
+    if (!isMatch) {
       return res.json({ success: false, message: "invalid password" });
+    }
 
     //generating token
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
@@ -64,7 +76,7 @@ export const login = async (req, res) => {
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
-    return res.json({ token });
+    return res.json({ success: true });
   } catch (error) {
     res.json({ success: false, message: error.message });
   }
@@ -80,6 +92,62 @@ export const logout = async (req, res) => {
       sameSite: process.env.NODE_ENV === "production " ? "none" : "strict",
     });
     return res.json({ success: true, message: "logged out" });
+  } catch (error) {
+    res.json({ success: false, message: error.message });
+  }
+};
+
+//sending verification OTP controller function
+export const sendVerifyOtp = async (req, res) => {
+  try {
+    const { userId } = req.body;
+    const user = await userModel.findById(userId);
+    if (user.IsAccountVerified) {
+      return res.json({ success: true, message: "Account already Verified!" });
+    }
+    const otp = String(Math.floor(100000 + Math.random() * 900000));
+    user.verifyOtp = otp;
+    user.verifyOtpExpiredAt = Date.now() + 24 * 60 * 60 * 1000;
+    await user.save();
+    const mailOptions = {
+      from: process.env.SENDER_EMAIL,
+      to: user.email,
+      subject: "Account Verification OTP",
+      text: `Your OTP is ${otp}. Verify your account using this OTP. The OTP expires in 24 hours`,
+    };
+
+    await transporter.sendMail(mailOptions);
+    return res.json({
+      success: true,
+      message: "Verification OTP sent on Email",
+    });
+  } catch (error) {
+    res.json({ success: false, message: error.message });
+  }
+};
+
+//user verify user email eaccount controller function
+export const verifyEmail = async (req, res) => {
+  const { userId, otp } = req.body;
+  if (!userId || otp) {
+    return res.json({ success: false, message: "Missing details" });
+  }
+  try {
+    const user = await userModel.findById(userId);
+    if (!user) {
+      return res.json({ success: false, message: "user not found" });
+    }
+    if (user.verifyOtp === "" || user.verifyOtp !== otp) {
+      return res.json({ success: false, message: "Invalid OTP" });
+    }
+    if (user.verifyOtpExpiredAt < Date.now()) {
+      return res.json({ success: false, message: "OTP Expired" });
+    }
+    user.IsAccountVerified = true;
+    user.verifyOtp = "";
+    user.verifyOtpExpiredAt = 0;
+    await user.save();
+    return res.json({ success: true, message: "email created successfully" });
   } catch (error) {
     res.json({ success: false, message: error.message });
   }
