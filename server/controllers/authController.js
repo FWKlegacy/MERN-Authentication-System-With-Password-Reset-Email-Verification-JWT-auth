@@ -2,6 +2,10 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import userModel from "../models/userModel.js";
 import transporter from "../config/nodeMailer.js";
+import {
+  EMAIL_VERIFY_TEMPLATE,
+  PASSWORD_RESET_TEMPLATE,
+} from "../config/emailtemplate.js";
 
 //user signup controller function
 export const register = async (req, res) => {
@@ -113,7 +117,11 @@ export const sendVerifyOtp = async (req, res) => {
       from: process.env.SENDER_EMAIL,
       to: user.email,
       subject: "Account Verification OTP",
-      text: `Your OTP is ${otp}. Verify your account using this OTP. The OTP expires in 24 hours`,
+      //text: `Your OTP is ${otp}. Verify your account using this OTP. The OTP expires in 24 hours`,
+      html: EMAIL_VERIFY_TEMPLATE.replace("{{otp}}", otp).replace(
+        "{email}",
+        user.email
+      ),
     };
 
     await transporter.sendMail(mailOptions);
@@ -129,9 +137,6 @@ export const sendVerifyOtp = async (req, res) => {
 //user verify user email eaccount controller function
 export const verifyEmail = async (req, res) => {
   const { userId, otp } = req.body;
-  if (!userId || otp) {
-    return res.json({ success: false, message: "Missing details" });
-  }
   try {
     const user = await userModel.findById(userId);
     if (!user) {
@@ -147,7 +152,10 @@ export const verifyEmail = async (req, res) => {
     user.verifyOtp = "";
     user.verifyOtpExpiredAt = 0;
     await user.save();
-    return res.json({ success: true, message: "email created successfully" });
+    return res.json({
+      success: true,
+      message: "email verification successful",
+    });
   } catch (error) {
     res.json({ success: false, message: error.message });
   }
@@ -181,7 +189,11 @@ export const sendResetOtp = async (req, res) => {
       from: process.env.SENDER_EMAIL,
       to: user.email,
       subject: "Password Reset OTP",
-      text: `Your OTP for resetting password is ${otp}. Use this OTP to proceed resetting your password`,
+      //text: `Your OTP for resetting password is ${otp}. Use this OTP to proceed resetting your password`,
+      html: PASSWORD_RESET_TEMPLATE.replace("{{otp}}", otp).replace(
+        "{email}",
+        user.email
+      ),
     };
 
     await transporter.sendMail(mailOptions);
@@ -214,7 +226,7 @@ export const resetPassword = async (req, res) => {
     if (user.resetOtpExpiredAt < Date.now()) {
       return res.json({ success: false, message: "OTP is expires" });
     }
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
     user.password = hashedPassword;
     user.resetOtp = "";
     user.resetOtpExpiredAt = 0;
